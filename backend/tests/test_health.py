@@ -5,8 +5,6 @@ from fastapi.testclient import TestClient
 from backend.app.core.config import settings
 from backend.app.main import app
 
-client = TestClient(app)
-
 
 @pytest.mark.unit
 def test_database_url_uses_psycopg():
@@ -17,14 +15,15 @@ def test_database_url_uses_psycopg():
 
 @pytest.mark.unit
 def test_health():
-    response = client.get("/health")
+    with TestClient(app) as client:
+        response = client.get("/health")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
 
 @pytest.mark.integration
-def test_health_db():
+def test_health_db(client):
     response = client.get("/health/db")
 
     assert response.status_code == 200
