@@ -1,5 +1,5 @@
 ﻿from uuid import UUID
-
+from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -82,7 +82,11 @@ def update_document(
         document.title = data.title
 
     if data.status is not None:
-        document.status = transition_status(document.status, data.status)
+        new_status = transition_status(document.status, data.status)
+        document.status = new_status
+
+        if new_status == "ready":
+            document.processed_at = datetime.now(timezone.utc)
 
     if data.error_message is not None:
         document.error_message = data.error_message
