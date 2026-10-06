@@ -18,8 +18,8 @@ services:
 
   api:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     environment:
       APP_NAME: ${APP_NAME}
       ENVIRONMENT: ${ENVIRONMENT}
