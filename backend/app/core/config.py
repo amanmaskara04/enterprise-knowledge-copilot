@@ -31,5 +31,14 @@ class Settings(BaseSettings):
             f"/{self.postgres_db}"
         )
 
+    @property
+    def test_database_url(self) -> str:
+        return (
+            f"postgresql+psycopg://"
+            f"{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}"
+            f"/{self.postgres_db}_test"
+        )
+
 
 settings = Settings()
