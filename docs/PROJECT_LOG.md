@@ -519,3 +519,62 @@ The following foundation requirements have been verified:
 Phase 2 will introduce the database model layer and begin building the data foundation for document ingestion and retrieval.
 
 The project will continue to introduce technologies deliberately rather than adding infrastructure before it is required.
+
+
+---
+
+# Phase 2: Document Data Layer
+
+Phase 2 gave the project its relational foundation. Users and documents now live in PostgreSQL with enforced relationships, schema changes go through Alembic migrations, and the API can create, list, read, update, and delete document records with strict per-owner isolation. No file bytes are stored yet. A document is a metadata record, and actual upload and storage arrive in Phase 3.
+
+## What was built
+
+- Alembic migrations, with revision `5b45bb480d7c` creating `users` and `documents`
+- SQLAlchemy 2.x models (`User`, `Document`) with a one-to-many relationship
+- Pydantic schemas for users, documents, and a generic paginated response
+- A service layer for users and documents, plus a document status state machine
+- Endpoints: `POST /users`, `GET /users/me`, and `POST/GET/PATCH/DELETE` on `/documents`
+- A separate `enterprise_knowledge_test` database, built by running the real migrations
+- 20 tests (12 unit, 8 integration)
+
+## Design decisions
+
+Primary keys are UUIDs rather than sequential integers, which makes identifiers harder to guess. This is not a substitute for authorization, which is why every document query also filters by owner. Requesting another user's document returns 404, not 403, so the API doesn't reveal that the document exists.
+
+Document status is a `varchar` with a `CHECK` constraint instead of a native PostgreSQL enum, because enums are awkward to change in migrations. The allowed transitions are `pending -> processing`, `processing -> ready`, `processing -> failed`, and `failed -> pending`. Anything else raises a domain error that the API maps to HTTP 409.
+
+Documents reference users with `ON DELETE CASCADE`, so deleting a user deletes their documents. Constraint and index names follow a naming convention on the metadata, so migrations produce predictable names. API-created emails are lowercased in the service layer. A database-level lowercase check was considered and deliberately not added.
+
+Authentication is intentionally not implemented. A development-only `X-Dev-User-Id` header identifies the caller and works only when `ENVIRONMENT=development`. It is marked as temporary in the code and will be replaced by real authentication in Phase 7. It must never reach production.
+
+## Problems found and fixed
+
+- Postgres and the API were published on all network interfaces. Both ports are now bound to `127.0.0.1`.
+- The Docker build failed because `psycopg` was installed without the binary extra. The requirements now pin `psycopg[binary]`.
+- Introducing a root `requirements.txt` required changing the Docker build context to the repository root and updating the `COPY` paths.
+- `alembic.ini` contained a UTF-8 BOM that broke the config parser. It was rewritten without one.
+- `alembic current` hung because the migration environment reused the application's engine. It now builds its own engine with `NullPool` and a connect timeout.
+- Selecting the test database through `DATABASE_URL` did not work. The fix is `alembic -x test_db=true`, which makes `env.py` use the test database URL.
+- The test fixtures ran migrations when `conftest.py` was imported, so even unit tests touched the database. Migrations now run inside the database fixture, and `pytest -m unit` runs with no database at all.
+
+## Exit criteria verified
+
+- Migrations apply, downgrade, and re-apply cleanly on both databases
+- Table structure, constraints, and indexes inspected directly in `psql`
+- A real SQL join across `documents` and `users` returns the expected rows
+- Cross-user access is blocked (another user's document returns 404, their list is empty)
+- Duplicate email returns 409, invalid input returns 422, a missing identity header returns 401
+- Invalid state transitions return 409
+- The test fixture refuses to run against any database whose name does not end in `_test`
+- Full suite passes: `20 passed`
+
+## Known limitations
+
+- There is no real authentication or password handling yet.
+- No file upload or storage yet (`storage_key` is metadata only).
+- `ready` is a terminal state, so re-processing a document will need a new transition later.
+- The README has not been refreshed for Phase 2.
+
+# Next Phase
+
+Phase 3 introduces PDF upload, file storage, and text extraction, turning document records into content the system can read.
